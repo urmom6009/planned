@@ -128,7 +128,6 @@ function Pill({
 }
 
 export default function DreamPlannerApp() {
-  console.log("chevron build")
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortOption>("due");
   const [tab, setTab] = useState("tasks");
@@ -160,6 +159,14 @@ export default function DreamPlannerApp() {
 
   const tasks: DPTask[] = useMemo(() => {
     if (!data?.tasks) return [];
+    const mapped = mapClickUpTasks(data.tasks);
+    console.table(
+      mapped.map(({ id, title, parentId }) => ({
+        id,
+        title,
+        parentId,
+      })),
+    );
     return mapClickUpTasks(data.tasks);
   }, [data]);
 
