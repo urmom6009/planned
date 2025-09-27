@@ -1,26 +1,118 @@
-@import "tailwindcss";
+/* --- Tailwind layers (must be first) --- */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
+/* --- base light background stays, dark gets grid + scanlines --- */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(1200px 600px at -10% 0%, rgba(236,72,153,.10) 0%, transparent 60%),
+    radial-gradient(900px 500px at 110% 20%, rgba(34,211,238,.12) 0%, transparent 60%);
+  z-index: -1;
+}
+
+html.dark body {
+  color-scheme: dark;
+  background: #0b0f1a; /* deep navy */
+}
+
+/* subtle grid + scanlines in dark */
+html.dark body::before {
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.02) 0px, rgba(255,255,255,0.02) 1px, transparent 2px),
+    radial-gradient(900px 500px at 110% 20%, rgba(34,211,238,.10) 0%, transparent 60%),
+    radial-gradient(1200px 600px at -10% 0%, rgba(236,72,153,.10) 0%, transparent 60%),
+    linear-gradient(180deg, #0b0f1a, #0b0f1a);
+  opacity: 0.9;
+}
+
+/* faint grid lines */
+html.dark body::after {
+  content: "";
+  position: fixed; inset: 0; pointer-events: none; z-index: -1;
+  background-image:
+    linear-gradient(rgba(236,72,153,.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34,211,238,.06) 1px, transparent 1px);
+  background-size: 24px 24px, 24px 24px;
+  mix-blend-mode: screen;
+}
+
+/* reusable helpers (pure CSS to dodge @apply issues) */
+.card-soft {
+  background-color: rgba(10, 14, 24, 0.72);
+  backdrop-filter: saturate(180%) blur(12px);
+  border: 1px solid rgba(34, 211, 238, .15);
+  border-radius: 1rem;
+  box-shadow: 0 0 24px rgba(236,72,153,.10),
+  0 6px 24px -8px rgba(2, 6, 23, 0.12);
+}
+html.dark .card-soft {
+  background-color: rgba(16, 20, 32, 0.7);
+  border: 1px solid rgba(236, 72, 153, 0.25);
+  box-shadow: 0 0 24px rgba(236,72,153,.10), 0 0 48px rgba(34,211,238,.08);
+}
+
+.btn-ghost {
+  background-color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgb(226 232 240);
+}
+.btn-ghost:hover { background-color: #ffffff; }
+html.dark .btn-ghost {
+  background-color: rgba(20, 24, 38, 0.8);
+  border: 1px solid rgba(34,211,238,.25);
+}
+html.dark .btn-ghost:hover { background-color: rgba(26,30,48,0.9); }
+
+/* scanned progress bar */
+html.dark .progress-stripe {
+  position: relative; overflow: hidden;
+  background: rgba(255,255,255,.06); height: 10px; border-radius: 9999px;
+  border: 1px solid rgba(236,72,153,.25);
+}
+html.dark .progress-stripe > span {
+  display: block; height: 100%; border-radius: inherit;
+  background-image:
+    repeating-linear-gradient(
+      45deg,
+      rgba(236,72,153,.65) 0 8px,
+      rgba(34,211,238,.55) 8px 16px
+    );
+  box-shadow: 0 0 12px rgba(236,72,153,.35), inset 0 0 6px rgba(0,0,0,.4);
+  animation: dp-scan 2s linear infinite;
+}
+@keyframes dp-scan { 0% { background-position: 0 0; } 100% { background-position: 64px 0; } }
+
+/* neon text accents (use sparingly) */
+.neon {
+  color: #ec4899;
+  text-shadow:
+    0 0 8px rgba(236,72,153,.6),
+    0 0 24px rgba(34,211,238,.4);
+}
+
+/* focus rings and hover states */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ring: 236 72 153;   /* hot pink */
+  --ring2: 34 211 238;  /* cyan */
 }
+*:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(var(--ring), .6),
+    0 0 0 6px rgba(var(--ring2), .25);
+  border-radius: 10px;
+  transition: box-shadow .1s ease;
+}
+a, button { transition: transform .12s ease, box-shadow .12s ease; }
+a:hover, button:hover { transform: translateY(-1px); }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* sans large body text and mono accent typeface */
+:root {
+  --dp-font-sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";
+  --dp-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+html.dark body { font-family: var(--dp-font-mono); letter-spacing: 0.2px; }
