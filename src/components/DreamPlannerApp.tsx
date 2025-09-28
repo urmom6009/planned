@@ -371,9 +371,8 @@ export default function DreamPlannerApp() {
     : null;
   const scheduleHeadline =
     planStart && planEnd
-      ? `${format(planStart, "EEE MMM d")} • ${format(planStart, "HH:mm")} – ${format(planEnd, "HH:mm")}${
-          planDurationLabel ? ` · ${planDurationLabel}` : ""
-        }`
+      ? `${format(planStart, "EEE MMM d")} • ${format(planStart, "HH:mm")} – ${format(planEnd, "HH:mm")}${planDurationLabel ? ` · ${planDurationLabel}` : ""
+      }`
       : "Plan upcoming tasks";
 
   const progressOverall = useMemo(() => {
@@ -503,24 +502,36 @@ export default function DreamPlannerApp() {
             </p>
           </div>
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-end">
-            <ThemeToggle className="self-end md:self-auto" />
-            <div className="flex w-full items-center gap-2 md:w-80">
-              <Input
-                placeholder="Search tasks or tags…"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              <Select value={sort} onValueChange={handleSortChange}>
-                <SelectTrigger className="w-36">
-                  <SelectValue placeholder="Sort" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="due">Due date</SelectItem>
-                  <SelectItem value="priority">Priority</SelectItem>
-                  <SelectItem value="progress">Progress</SelectItem>
-                  <SelectItem value="alpha">A–Z</SelectItem>
-                </SelectContent>
-              </Select>
+            {/* actions row (log out + theme) */}
+            <div className="flex items-center gap-2 md:order-2">
+              <form method="POST" action="/api/auth/logout">
+                <Button variant="secondary" size="sm" aria-label="Log out">Log out</Button>
+              </form>
+              <ThemeToggle />
+            </div>
+
+            {/* search + sort */}
+            <div className="flex w-full items-center gap-2 md:w-80 md:order-1">
+              <form role="search" className="flex w-full items-center gap-2">
+                <Input
+                  placeholder="Search tasks or tags…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  aria-label="Search tasks or tags"
+                  className="w-full"
+                />
+                <Select value={sort} onValueChange={handleSortChange}>
+                  <SelectTrigger className="w-36" aria-label="Sort tasks">
+                    <SelectValue placeholder="Sort" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="due">Due date</SelectItem>
+                    <SelectItem value="priority">Priority</SelectItem>
+                    <SelectItem value="progress">Progress</SelectItem>
+                    <SelectItem value="alpha">A–Z</SelectItem>
+                  </SelectContent>
+                </Select>
+              </form>
             </div>
           </div>
         </header>
@@ -1047,11 +1058,10 @@ export default function DreamPlannerApp() {
                               At Risk
                             </span>
                             <span
-                              className={`text-base font-semibold ${
-                                summary.riskCount
-                                  ? "text-amber-600"
-                                  : "text-slate-700 dark:text-slate-300"
-                              }`}
+                              className={`text-base font-semibold ${summary.riskCount
+                                ? "text-amber-600"
+                                : "text-slate-700 dark:text-slate-300"
+                                }`}
                             >
                               {summary.riskCount}
                             </span>
@@ -1163,7 +1173,7 @@ export default function DreamPlannerApp() {
                           className={cn(
                             "space-y-3 rounded-lg border border-slate-200/80 bg-white/90 p-3 shadow-sm transition dark:border-slate-800/70 dark:bg-slate-900/60",
                             isFocused &&
-                              "border-pink-500/50 shadow-[0_10px_24px_rgba(236,72,153,0.2)]",
+                            "border-pink-500/50 shadow-[0_10px_24px_rgba(236,72,153,0.2)]",
                           )}
                         >
                           <div className="flex items-center justify-between">

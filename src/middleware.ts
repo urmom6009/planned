@@ -1,22 +1,36 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const USER = process.env.BASIC_USER;
-const PASS = process.env.BASIC_PASS;
+const AUTH_COOKIE = "dp_auth"; // presence = authenticated
 
 export function middleware(req: NextRequest) {
-    if (!USER || !PASS) return NextResponse.next();
+    const { pathname } = req.nextUrl;
 
-    const auth = req.headers.get("authorization");
-    if (!auth?.startsWith("Basic ")) {
-        return new NextResponse("Auth required", {
-            status: 401,
-            headers: { "WWW-Authenticate": 'Basic realm="DreamPlanner"' }
-        });
+    // public routes that must bypass auth:
+    const publicRoutes = [
+        "/login",
+        "/api/auth/login",
+        "/api/auth/logout",
+        "/manifest.webmanifest"
+    ];
+    if (
+        pathname.startsWith("/_next") ||
+        pathname.startsWith("/icons") ||
+        publicRoutes.some((p) => pathname.startsWith(p)) ||
+        pathname.match(/\.(?:js|css|png|jpg|jpeg|gif|svg|ico|webmanifest)$/)
+    ) {
+        return NextResponse.next();
     }
-    const [u, p] = atob(auth.slice(6)).split(":");
-    if (u !== USER || p !== PASS) return new NextResponse("Forbidden", { status: 403 });
-    return NextResponse.next();
+
+    // check cookie
+    const hasAuth = req.cookies.get(AUTH_COOKIE)?.value === "1";
+    if (hasAuth) return NextResponse.next();
+
+    // redirect to login
+    const url = req.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("next", pathname);
+    return NextResponse.redirect(url);
 }
 
 export const config = { matcher: ["/((?!_next|.*\\.(?:js|css|png|jpg|jpeg|gif|svg|ico|webmanifest)$).*)"] };
