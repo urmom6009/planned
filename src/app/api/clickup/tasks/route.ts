@@ -1,9 +1,12 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import type { ClickUpTasksResponse } from "@/lib/clickup-adapter";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic" // no prerender
 
 const CU_BASE = "https://api.clickup.com/api/v2";
 
-export async function GET() {
+export async function GET(_req: NextRequest) {
   const token = process.env.CLICKUP_TOKEN;
   const listIdsCSV = process.env.CLICKUP_LIST_IDS;
 
@@ -33,6 +36,5 @@ export async function GET() {
   const tasks = results.flatMap((r) =>
     Array.isArray(r.tasks) ? r.tasks : []
   );
-
   return NextResponse.json({ tasks } satisfies ClickUpTasksResponse);
 }
