@@ -11,6 +11,7 @@ export type DPTask = {
   tags?: string[];
   progress?: number;
   parentId?: string;
+  url?: string;
 };
 
 export type ClickUpStatus = {
@@ -39,6 +40,7 @@ export type ClickUpTask = {
   priority?: ClickUpPriority | null;
   due_date?: string | number | null;
   time_estimate?: string | number | null;
+  url?: string | null;
   dependencies?: ClickUpDependency[] | null;
   tags?: ClickUpTag[] | null;
 };
@@ -123,6 +125,7 @@ export function mapClickUpTasks(cuTasks: ClickUpTask[]): DPTask[] {
       priority: prioMap[priorityName] ?? "medium",
       deps,
       tags,
+      url: t.url ?? undefined,
       // ClickUp custom fields could hold progress; default to undefined
       progress: undefined,
       parentId,

@@ -3,6 +3,62 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    --background: 213 45% 97%;
+    --foreground: 222 47% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 12%;
+    --primary: 189 94% 43%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 12%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 12%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 192 95% 55%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 217 61% 7%;
+    --foreground: 213 31% 88%;
+    --card: 222 47% 9%;
+    --card-foreground: 210 40% 96%;
+    --popover: 222 47% 9%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 189 93% 48%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 222 40% 16%;
+    --secondary-foreground: 213 31% 88%;
+    --muted: 222 40% 17%;
+    --muted-foreground: 214 20% 68%;
+    --accent: 222 40% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 222 40% 22%;
+    --input: 222 40% 22%;
+    --ring: 189 93% 48%;
+  }
+
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+}
+
 /* --- base light background stays, dark gets grid + scanlines --- */
 body::before {
   content: "";
@@ -115,4 +171,4 @@ a:hover, button:hover { transform: translateY(-1px); }
   --dp-font-sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol";
   --dp-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
 }
-html.dark body { font-family: var(--dp-font-mono); letter-spacing: 0.2px; }
+html.dark body { font-family: var(--dp-font-sans); letter-spacing: 0.05px; }

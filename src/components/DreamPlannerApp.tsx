@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { format, addMinutes, isBefore, parseISO } from "date-fns";
 import ThemeToggle from "@/components/ThemeToggle";
+import { cn } from "@/lib/utils";
 
 import {
   Card,
@@ -47,14 +48,24 @@ type SortOption = (typeof sortOptions)[number];
 type Priority = DPTask["priority"];
 type TaskStatus = DPTask["status"];
 
+type TaskWithDependents = {
+  task: DPTask;
+  subtasks: DPTask[];
+  allSubtasks: DPTask[];
+};
+
 const isSortOption = (value: string): value is SortOption =>
   sortOptions.includes(value as SortOption);
 
 const prioHue: Record<Priority, string> = {
-  urgent: "bg-red-500/10 text-red-600 border-red-500/30",
-  high: "bg-amber-500/10 text-amber-600 border-amber-500/30",
-  medium: "bg-blue-500/10 text-blue-600 border-blue-500/30",
-  low: "bg-emerald-500/10 text-emerald-600 border-emerald-500/30",
+  urgent:
+    "bg-red-500/10 text-red-600 border-red-500/30 dark:bg-red-500/20 dark:text-red-300 dark:border-red-500/40",
+  high:
+    "bg-amber-500/10 text-amber-600 border-amber-500/30 dark:bg-amber-500/20 dark:text-amber-200 dark:border-amber-500/40",
+  medium:
+    "bg-blue-500/10 text-blue-600 border-blue-500/30 dark:bg-blue-500/20 dark:text-blue-200 dark:border-blue-500/40",
+  low:
+    "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-200 dark:border-emerald-500/40",
 };
 
 const statusLabel: Record<TaskStatus, string> = {
@@ -117,8 +128,6 @@ function suggestDayPlan(tasks: DPTask[], startISO?: string) {
   return scheduled;
 }
 
-const pct = (n?: number) => Math.max(0, Math.min(100, Math.round(n ?? 0)));
-
 function Pill({
   children,
   className = "",
@@ -135,6 +144,20 @@ function Pill({
   );
 }
 
+function TaskIdBadge({ id, className = "" }: { id: string; className?: string }) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "bg-gradient-to-r from-pink-500/15 via-cyan-500/15 to-transparent text-[11px] font-semibold uppercase tracking-wide text-pink-600 shadow-[0_0_14px_rgba(236,72,153,0.35)] dark:from-pink-500/20 dark:via-cyan-400/10 dark:text-pink-200 dark:shadow-[0_0_18px_rgba(236,72,153,0.45)] border-pink-500/40",
+        className,
+      )}
+    >
+      #{id}
+    </Badge>
+  );
+}
+
 export default function DreamPlannerApp() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortOption>("due");
@@ -143,6 +166,7 @@ export default function DreamPlannerApp() {
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>(
     {},
   );
+  const [focusQueue, setFocusQueue] = useState<string[]>([]);
 
   const handleSortChange = (value: string) => {
     setSort(isSortOption(value) ? value : "due");
@@ -153,6 +177,14 @@ export default function DreamPlannerApp() {
       ...prev,
       [taskId]: !prev[taskId],
     }));
+  };
+
+  const toggleFocusTask = (taskId: string) => {
+    setFocusQueue((queue) =>
+      queue.includes(taskId)
+        ? queue.filter((id) => id !== taskId)
+        : [...queue, taskId],
+    );
   };
 
   const { data, isLoading, error } = useQuery<ClickUpTasksResponse>({
@@ -248,24 +280,24 @@ export default function DreamPlannerApp() {
       .map(({ milestone, children }) => {
         const actionable = children
           .map((child) => {
-            const subtasks = childMap.get(child.id) ?? [];
-            
-            const matchingSubtasks = subtasks
-              .filter(matchesFilters)
-              .sort(compareTasks);
+            const directSubtasks = childMap.get(child.id) ?? [];
+            const sortedSubtasks = [...directSubtasks].sort(compareTasks);
+            const parentMatches = matchesFilters(child);
+            const matchingSubtasks = sortedSubtasks.filter(matchesFilters);
+            const visibleSubtasks = parentMatches ? sortedSubtasks : matchingSubtasks;
 
-            if (!matchesFilters(child) && matchingSubtasks.length === 0) {
+            if (!parentMatches && visibleSubtasks.length === 0) {
               return null;
             }
 
             return {
               task: child,
-              subtasks: matchingSubtasks,
+              subtasks: visibleSubtasks,
+              allSubtasks: sortedSubtasks,
             };
           })
           .filter(
-            (entry): entry is { task: DPTask; subtasks: DPTask[] } =>
-              entry !== null,
+            (entry): entry is TaskWithDependents => entry !== null,
           )
           .sort((a, b) => compareTasks(a.task, b.task));
 
@@ -281,7 +313,7 @@ export default function DreamPlannerApp() {
           group,
         ): group is {
           milestone: DPTask;
-          tasks: { task: DPTask; subtasks: DPTask[] }[];
+          tasks: TaskWithDependents[];
         } => group !== null,
       );
   }, [milestoneGroups, childMap, queryLower, showOnlyAtRisk, sort]);
@@ -291,9 +323,31 @@ export default function DreamPlannerApp() {
     [filteredMilestones],
   );
 
+  const focusSet = useMemo(() => new Set(focusQueue), [focusQueue]);
+
+  const prioritizedQueue = useMemo(() => {
+    if (!focusQueue.length) return actionableQueue;
+    const prioritized: DPTask[] = [];
+    const seen = new Set<string>();
+    for (const id of focusQueue) {
+      const task = actionableQueue.find((item) => item.id === id);
+      if (task && !seen.has(task.id)) {
+        prioritized.push(task);
+        seen.add(task.id);
+      }
+    }
+    for (const task of actionableQueue) {
+      if (!seen.has(task.id)) {
+        prioritized.push(task);
+        seen.add(task.id);
+      }
+    }
+    return prioritized;
+  }, [actionableQueue, focusQueue]);
+
   const todayPlan = useMemo(
-    () => suggestDayPlan(actionableQueue.slice(0, 8)),
-    [actionableQueue],
+    () => suggestDayPlan(prioritizedQueue.slice(0, 8)),
+    [prioritizedQueue],
   );
 
   const planSummary = useMemo(() => {
@@ -396,10 +450,18 @@ export default function DreamPlannerApp() {
 
   const upNextTasks = useMemo(() => {
     const scheduledIds = new Set(todayPlan.map(({ task }) => task.id));
-    return actionableQueue
+    return prioritizedQueue
       .filter((task) => !scheduledIds.has(task.id))
       .slice(0, 5);
-  }, [actionableQueue, todayPlan]);
+  }, [prioritizedQueue, todayPlan]);
+
+  const focusList = useMemo(
+    () =>
+      focusQueue
+        .map((id) => tasks.find((task) => task.id === id))
+        .filter((task): task is DPTask => Boolean(task)),
+    [focusQueue, tasks],
+  );
 
   const statusBuckets = useMemo(() => {
     const buckets: Record<TaskStatus, DPTask[]> = {
@@ -427,14 +489,16 @@ export default function DreamPlannerApp() {
   const commits: { id: string; msg: string; time: string }[] = [];
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-b from-slate-50 to-white p-6 text-slate-900 md:p-10">
+    <div
+      className="min-h-screen w-full bg-gradient-to-b from-slate-50 to-white p-6 text-slate-900 transition-colors duration-300 dark:from-[#05070e] dark:via-[#090e1a] dark:to-[#05070e] dark:text-slate-100 md:p-10"
+    >
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight md:text-4xl">
               <LayoutGrid className="h-7 w-7" /> DreamPlanner
             </h1>
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
               Fast planner • Notion for docs • ClickUp/GitHub data • AI scheduling soon™
             </p>
           </div>
@@ -462,35 +526,35 @@ export default function DreamPlannerApp() {
         </header>
 
         {isLoading && (
-          <Card className="border-amber-200 bg-amber-50">
-            <CardContent className="p-4 text-sm text-amber-700">
+          <Card className="border-amber-200 bg-amber-50 dark:border-amber-500/60 dark:bg-amber-500/10">
+            <CardContent className="p-4 text-sm text-amber-700 dark:text-amber-300">
               Pulling tasks from ClickUp…
             </CardContent>
           </Card>
         )}
 
         {error && (
-          <Card className="border-red-200 bg-red-50">
-            <CardContent className="p-4 text-sm text-red-700">
+          <Card className="border-red-200 bg-red-50 dark:border-red-500/60 dark:bg-red-500/10">
+            <CardContent className="p-4 text-sm text-red-700 dark:text-red-300">
               Failed to fetch tasks. Check your <code>.env.local</code> and reload.
             </CardContent>
           </Card>
         )}
 
-        <Card className="border-slate-200 shadow-sm">
+        <Card className="border-slate-200 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60">
           <CardContent className="p-4 md:p-6">
             <div className="grid gap-4 md:grid-cols-4">
               <div className="md:col-span-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-slate-700">
+                  <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
                     <ListChecks className="h-5 w-5" />
                     <span className="font-medium">Overall Progress</span>
                   </div>
-                  <span className="text-sm text-slate-500">{progressOverall}%</span>
+                  <span className="text-sm text-slate-500 dark:text-slate-400">{progressOverall}%</span>
                 </div>
                 <Progress className="mt-2" value={progressOverall} />
               </div>
-              <label className="flex cursor-pointer items-center justify-end gap-2 text-sm text-slate-700">
+              <label className="flex cursor-pointer items-center justify-end gap-2 text-sm text-slate-700 dark:text-slate-300">
                 <Checkbox
                   checked={showOnlyAtRisk}
                   onCheckedChange={(value) => setShowOnlyAtRisk(Boolean(value))}
@@ -522,16 +586,16 @@ export default function DreamPlannerApp() {
                   return (
                     <section
                       key={milestone.id}
-                      className="space-y-3 rounded-lg border border-slate-200/70 bg-white/70 p-4 shadow-sm"
+                      className="space-y-3 rounded-lg border border-slate-200/70 bg-white/70 p-4 shadow-sm dark:border-slate-800/60 dark:bg-slate-900/60"
                     >
                       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                        <div className="flex items-center gap-2 text-slate-700">
-                          <Badge variant="outline">{milestone.id}</Badge>
+                        <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                          <TaskIdBadge id={milestone.id} />
                           <span className="text-lg font-semibold">
                             {milestone.title}
                           </span>
                         </div>
-                        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500">
+                        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
                           {milestoneDue ? (
                             <span className="flex items-center gap-1.5">
                               <CalendarDays className="h-4 w-4" />
@@ -546,157 +610,342 @@ export default function DreamPlannerApp() {
                       </div>
 
                       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                        {tasks.map(({ task, subtasks }) => {
-                          const hasSubtasks = subtasks.length > 0;
-                          const subtaskCount = subtasks.length;
-                          const isExpanded = Boolean(expandedTasks[task.id]);
+                        {tasks.map(({ task, subtasks, allSubtasks }) => {
+                          const hasSubtasks = allSubtasks.length > 0;
+                          const isExpanded = hasSubtasks ? Boolean(expandedTasks[task.id]) : false;
+                          const isFocused = focusSet.has(task.id);
+                          const estimateLabel = formatMinutesLabel(task.estimateMin);
+                          const taskDueLabel = task.due ? format(parseISO(task.due), "MMM d, HH:mm") : null;
+
+                          if (!hasSubtasks) {
+                            const progressValue = Math.max(0, Math.min(100, Math.round(task.progress ?? 0)));
+
+                            return (
+                              <motion.div
+                                key={task.id}
+                                layout
+                                initial={{ opacity: 0, y: 12 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -12 }}
+                                transition={{ duration: 0.2, ease: "easeOut" }}
+                              >
+                                <Card
+                                  className={cn(
+                                    "h-full border border-slate-200/70 bg-white/95 transition hover:border-pink-300 hover:shadow-lg dark:border-slate-800/60 dark:bg-slate-900/60 dark:hover:border-pink-400/40",
+                                    isFocused && "border-pink-500/50 shadow-[0_12px_28px_rgba(236,72,153,0.22)]",
+                                  )}
+                                >
+                                  <CardHeader className="pb-3">
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                      <div className="flex min-w-0 flex-col gap-1">
+                                        <TaskIdBadge id={task.id} className="w-fit" />
+                                        <CardTitle className="text-base font-semibold leading-snug text-slate-900 dark:text-slate-100">
+                                          {task.title}
+                                        </CardTitle>
+                                      </div>
+                                      <div className="flex flex-wrap items-center justify-end gap-2">
+                                        {isFocused ? (
+                                          <Badge variant="secondary" className="bg-pink-500/20 text-pink-700 shadow-sm dark:bg-pink-500/20 dark:text-pink-100">
+                                            Planned
+                                          </Badge>
+                                        ) : null}
+                                        <Pill className={`${prioHue[task.priority]} capitalize`}>
+                                          {task.priority}
+                                        </Pill>
+                                      </div>
+                                    </div>
+                                    <CardDescription className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
+                                      {taskDueLabel ? (
+                                        <span className="flex items-center gap-1">
+                                          <CalendarDays className="h-3.5 w-3.5" /> {taskDueLabel}
+                                        </span>
+                                      ) : null}
+                                      {estimateLabel ? (
+                                        <span className="flex items-center gap-1">
+                                          <Clock className="h-3.5 w-3.5" /> {estimateLabel}
+                                        </span>
+                                      ) : null}
+                                      <Badge variant="outline">{statusLabel[task.status]}</Badge>
+                                    </CardDescription>
+                                  </CardHeader>
+                                  <CardContent className="space-y-3">
+                                    {task.tags && task.tags.length ? (
+                                      <div className="flex flex-wrap gap-1">
+                                        {task.tags.map((tag) => (
+                                          <Badge key={tag} variant="secondary">
+                                            #{tag}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                    <div>
+                                      <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+                                        <span>Progress</span>
+                                        <span>{progressValue}%</span>
+                                      </div>
+                                      <Progress value={progressValue} className="mt-1" />
+                                    </div>
+                                    {task.deps?.length ? (
+                                      <div className="text-xs text-slate-600 dark:text-slate-400">
+                                        Deps: {task.deps.join(", ")}
+                                      </div>
+                                    ) : null}
+                                    <div className="flex flex-wrap gap-2 pt-1">
+                                      {task.url ? (
+                                        <Button size="sm" variant="outline" asChild>
+                                          <a href={task.url} target="_blank" rel="noopener noreferrer">
+                                            Open in ClickUp
+                                          </a>
+                                        </Button>
+                                      ) : (
+                                        <Button size="sm" variant="outline">
+                                          Open
+                                        </Button>
+                                      )}
+                                      <Button
+                                        size="sm"
+                                        variant={isFocused ? "default" : "secondary"}
+                                        onClick={() => toggleFocusTask(task.id)}
+                                        aria-pressed={isFocused}
+                                      >
+                                        {isFocused ? "Planned" : "Plan today"}
+                                      </Button>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              </motion.div>
+                            );
+                          }
+
+                          const totalSubtasks = allSubtasks.length;
+                          const doneSubtasks = allSubtasks.filter((sub) => sub.status === "done").length;
+                          const inFlightSubtasks = allSubtasks.filter((sub) => sub.status === "in_progress").length;
+                          const reviewSubtasks = allSubtasks.filter((sub) => sub.status === "review").length;
+                          const todoSubtasks = totalSubtasks - doneSubtasks - inFlightSubtasks - reviewSubtasks;
+                          const aggregatedProgress = Math.round((doneSubtasks / totalSubtasks) * 100);
+                          const totalEstimateMinutes = allSubtasks.reduce(
+                            (acc, sub) => acc + (sub.estimateMin ?? 0),
+                            0,
+                          );
+                          const aggregateEstimateLabel = formatMinutesLabel(totalEstimateMinutes);
+                          const nextDueDate = allSubtasks
+                            .map((sub) => (sub.due ? parseISO(sub.due) : null))
+                            .filter((date): date is Date => !!date && Number.isFinite(date.getTime()))
+                            .sort((a, b) => a.getTime() - b.getTime())[0];
+                          const nextDueLabel = nextDueDate
+                            ? `${format(nextDueDate, "MMM d")} • ${format(nextDueDate, "HH:mm")}`
+                            : null;
+                          const blockedCount = allSubtasks.filter((sub) => (sub.deps?.length ?? 0) > 0).length;
 
                           return (
                             <motion.div
                               key={task.id}
-                              initial={{ opacity: 0, y: 8 }}
+                              layout
+                              initial={{ opacity: 0, y: 12 }}
                               animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -12 }}
+                              transition={{ duration: 0.2, ease: "easeOut" }}
                             >
-                              <Card className="h-full border-slate-200 bg-white/95 transition hover:border-slate-300 hover:shadow-md">
+                              <Card
+                                className={cn(
+                                  "group relative h-full overflow-hidden border border-pink-500/25 bg-white/95 shadow-[0_18px_45px_rgba(15,23,42,0.12)] transition-all hover:border-pink-400/45 hover:shadow-[0_20px_54px_rgba(236,72,153,0.2)] dark:border-pink-400/25 dark:bg-slate-900/70",
+                                  isFocused && "border-pink-400/60 shadow-[0_22px_60px_rgba(236,72,153,0.25)]",
+                                )}
+                              >
+                                <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-pink-400/40 to-transparent" />
                                 <CardHeader
-                                  className={`pb-2 ${hasSubtasks ? "cursor-pointer" : ""}`}
+                                  className="pb-4 transition-colors cursor-pointer hover:bg-pink-50/40 focus-visible:bg-pink-50/40 dark:hover:bg-pink-500/5 dark:focus-visible:bg-pink-500/5"
                                   onClick={(event) => {
-                                    if (!hasSubtasks) return;
                                     const target = event.target as HTMLElement;
-                                    if (target.closest("button")) return;
+                                    if (target.closest('[data-no-toggle]')) return;
                                     toggleTaskExpansion(task.id);
                                   }}
                                   onKeyDown={(event) => {
-                                    if (!hasSubtasks) return;
                                     if (event.key === "Enter" || event.key === " ") {
                                       event.preventDefault();
                                       toggleTaskExpansion(task.id);
                                     }
                                   }}
-                                  role={hasSubtasks ? "button" : undefined}
-                                  tabIndex={hasSubtasks ? 0 : undefined}
-                                  aria-expanded={hasSubtasks ? isExpanded : undefined}
-                                  aria-controls={hasSubtasks ? `subtasks-${task.id}` : undefined}
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-expanded={isExpanded}
+                                  aria-controls={`subtasks-${task.id}`}
                                 >
-                                  <div className="flex items-start justify-between gap-3">
-                                    <CardTitle className="text-base leading-snug">
-                                      {task.title}
-                                    </CardTitle>
-                                    <div className="flex items-center gap-2">
-                                      <div className="flex items-center gap-1">
-                                        <Pill className={prioHue[task.priority]}>
+                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div className="flex min-w-0 flex-col gap-1">
+                                      <TaskIdBadge id={task.id} className="w-fit" />
+                                      <CardTitle className="text-lg font-semibold leading-snug text-slate-900 dark:text-slate-100">
+                                        {task.title}
+                                      </CardTitle>
+                                    </div>
+                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                      {isFocused ? (
+                                        <Badge
+                                          variant="secondary"
+                                          className="bg-pink-500/20 text-pink-700 shadow-sm dark:bg-pink-500/20 dark:text-pink-100"
+                                          data-no-toggle
+                                        >
+                                          Planned
+                                        </Badge>
+                                      ) : null}
+                                      <div className="flex items-center gap-1" data-no-toggle>
+                                        <Pill className={`${prioHue[task.priority]} capitalize`}>
                                           {task.priority}
                                         </Pill>
-                                        {hasSubtasks ? (
-                                          <Pill className="bg-slate-100 border-slate-300 text-slate-600">
-                                            {subtaskCount} subtask{subtaskCount === 1 ? "" : "s"}
-                                          </Pill>
-                                        ) : null}
+                                        <Pill className="border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+                                          {totalSubtasks} dependent{totalSubtasks === 1 ? "" : "s"}
+                                        </Pill>
                                       </div>
-                                      {hasSubtasks ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => toggleTaskExpansion(task.id)}
-                                          aria-expanded={isExpanded}
-                                          aria-controls={`subtasks-${task.id}`}
-                                          aria-label={
-                                            isExpanded
-                                              ? "Hide subtasks"
-                                              : "Show subtasks"
-                                          }
-                                          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
-                                        >
-                                          {isExpanded ? (
-                                            <ChevronDown className="h-4 w-4" />
-                                          ) : (
-                                            <ChevronRight className="h-4 w-4" />
-                                          )}
-                                        </button>
-                                      ) : null}
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleTaskExpansion(task.id)}
+                                        aria-expanded={isExpanded}
+                                        aria-controls={`subtasks-${task.id}`}
+                                        aria-label={isExpanded ? "Hide subtasks" : "Show subtasks"}
+                                        className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-pink-400/70 hover:bg-pink-50/60 hover:text-pink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-400 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-pink-400/60 dark:hover:bg-pink-500/10 dark:hover:text-pink-100"
+                                        data-no-toggle
+                                      >
+                                        {isExpanded ? (
+                                          <ChevronDown className="h-4 w-4" />
+                                        ) : (
+                                          <ChevronRight className="h-4 w-4" />
+                                        )}
+                                      </button>
                                     </div>
                                   </div>
-                                  <CardDescription className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                                    <Pill className="bg-slate-100 border-slate-300">
-                                      {statusLabel[task.status]}
-                                    </Pill>
-                                    {task.due ? (
-                                      <Pill className="bg-slate-100 border-slate-300">
-                                        <CalendarDays className="h-3 w-3" />{" "}
-                                        {format(parseISO(task.due), "MMM d, HH:mm")}
-                                      </Pill>
+                                  <CardDescription className="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-600 dark:text-slate-400">
+                                    <span className="flex items-center gap-1">
+                                      <ListChecks className="h-3.5 w-3.5" /> {doneSubtasks}/{totalSubtasks} complete
+                                    </span>
+                                    {nextDueLabel ? (
+                                      <span className="flex items-center gap-1">
+                                        <CalendarDays className="h-3.5 w-3.5" /> {nextDueLabel}
+                                      </span>
                                     ) : null}
-                                    {task.estimateMin ? (
-                                      <Pill className="bg-slate-100 border-slate-300">
-                                        <Clock className="h-3 w-3" /> {task.estimateMin}m
-                                      </Pill>
+                                    {aggregateEstimateLabel ? (
+                                      <span className="flex items-center gap-1">
+                                        <Clock className="h-3.5 w-3.5" /> {aggregateEstimateLabel}
+                                      </span>
                                     ) : null}
                                   </CardDescription>
                                 </CardHeader>
-                                <CardContent className="space-y-3">
-                                  {task.tags && task.tags.length ? (
-                                    <div className="flex flex-wrap gap-1">
-                                      {task.tags.map((tag) => (
-                                        <Badge key={tag} variant="secondary">
-                                          #{tag}
-                                        </Badge>
-                                      ))}
+                                <CardContent className="space-y-4">
+                                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_200px] md:items-center">
+                                    <div>
+                                      <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
+                                        <span>{doneSubtasks} of {totalSubtasks} closed</span>
+                                        <span>{aggregatedProgress}%</span>
+                                      </div>
+                                      <Progress value={aggregatedProgress} className="mt-1 h-2 rounded-full" />
                                     </div>
-                                  ) : null}
-                                  <div>
-                                    <div className="flex items-center justify-between text-xs text-slate-600">
-                                      <span>Progress</span>
-                                      <span>{pct(task.progress)}%</span>
+                                    <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 dark:text-slate-400">
+                                      <div className="rounded-md border border-slate-200/70 bg-white/80 p-2 text-center dark:border-slate-800/60 dark:bg-slate-900/60">
+                                        <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{inFlightSubtasks}</p>
+                                        <p>In progress</p>
+                                      </div>
+                                      <div className="rounded-md border border-slate-200/70 bg-white/80 p-2 text-center dark:border-slate-800/60 dark:bg-slate-900/60">
+                                        <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{reviewSubtasks}</p>
+                                        <p>Review</p>
+                                      </div>
+                                      <div className="rounded-md border border-slate-200/70 bg-white/80 p-2 text-center dark:border-slate-800/60 dark:bg-slate-900/60">
+                                        <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{todoSubtasks}</p>
+                                        <p>Queued</p>
+                                      </div>
+                                      <div className="rounded-md border border-slate-200/70 bg-white/80 p-2 text-center dark:border-slate-800/60 dark:bg-slate-900/60">
+                                        <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{blockedCount}</p>
+                                        <p>Blocked</p>
+                                      </div>
                                     </div>
-                                    <Progress value={pct(task.progress)} className="mt-1" />
                                   </div>
-                                  {task.deps?.length ? (
-                                    <div className="text-xs text-slate-600">
-                                      Deps: {task.deps.join(", ")}
-                                    </div>
-                                  ) : null}
-                                  <div className="flex gap-2 pt-1">
-                                    <Button size="sm" variant="secondary">
-                                      Open
+                                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+                                    {aggregateEstimateLabel ? (
+                                      <Pill className="border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+                                        <Clock className="h-3 w-3" /> Total {aggregateEstimateLabel}
+                                      </Pill>
+                                    ) : null}
+                                    {nextDueLabel ? (
+                                      <Pill className="border-slate-300 bg-slate-100 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+                                        <CalendarDays className="h-3 w-3" /> Next due {nextDueLabel}
+                                      </Pill>
+                                    ) : null}
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {task.url ? (
+                                      <Button size="sm" variant="outline" asChild data-no-toggle>
+                                        <a href={task.url} target="_blank" rel="noopener noreferrer">
+                                          Open in ClickUp
+                                        </a>
+                                      </Button>
+                                    ) : (
+                                      <Button size="sm" variant="outline" data-no-toggle>
+                                        Open
+                                      </Button>
+                                    )}
+                                    <Button
+                                      size="sm"
+                                      variant={isFocused ? "default" : "secondary"}
+                                      onClick={() => toggleFocusTask(task.id)}
+                                      aria-pressed={isFocused}
+                                      data-no-toggle
+                                    >
+                                      {isFocused ? "Planned" : "Plan today"}
                                     </Button>
-                                    <Button size="sm">Start</Button>
                                   </div>
                                   <AnimatePresence initial={false}>
-                                    {hasSubtasks && isExpanded ? (
+                                    {isExpanded ? (
                                       <motion.div
                                         id={`subtasks-${task.id}`}
                                         key={`subtasks-${task.id}`}
                                         initial={{ height: 0, opacity: 0 }}
                                         animate={{ height: "auto", opacity: 1 }}
                                         exit={{ height: 0, opacity: 0 }}
-                                        transition={{ duration: 0.2, ease: "easeOut" }}
-                                        className="space-y-2 overflow-hidden rounded-md border border-slate-200 bg-white/95 p-2 text-xs text-slate-600"
+                                        transition={{ duration: 0.25, ease: "easeOut" }}
+                                        className="space-y-2 overflow-hidden pl-1 pt-1"
                                       >
-                                        {subtasks.map((subtask) => (
-                                          <div key={subtask.id} className="space-y-1">
-                                            <div className="flex items-center justify-between gap-2">
-                                              <span className="truncate font-medium text-slate-700">
-                                                {subtask.title}
-                                              </span>
-                                              <Badge variant="outline">
-                                                {statusLabel[subtask.status]}
-                                              </Badge>
-                                            </div>
-                                            <div className="flex flex-wrap items-center gap-2">
-                                              {subtask.due ? (
-                                                <span className="flex items-center gap-1">
-                                                  <CalendarDays className="h-3 w-3" />
-                                                  {format(parseISO(subtask.due), "MMM d")}
+                                        {subtasks.map((subtask, index) => {
+                                          const subtaskEstimate = formatMinutesLabel(subtask.estimateMin);
+                                          return (
+                                            <motion.div
+                                              key={subtask.id}
+                                              initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                                              exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                                              transition={{ duration: 0.18, ease: "easeOut", delay: index * 0.03 }}
+                                              className="relative overflow-hidden rounded-lg border border-slate-200/70 bg-gradient-to-br from-slate-50 to-white p-3 text-sm shadow-sm dark:border-slate-800/60 dark:from-slate-900/60 dark:to-slate-900/80"
+                                            >
+                                              <span
+                                                aria-hidden
+                                                className="pointer-events-none absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-pink-400 via-cyan-400 to-transparent"
+                                              />
+                                              <div className="flex items-start justify-between gap-2">
+                                                <span className="truncate font-medium text-slate-800 dark:text-slate-100">
+                                                  {subtask.title}
                                                 </span>
-                                              ) : null}
-                                              {subtask.estimateMin ? (
-                                                <span className="flex items-center gap-1">
-                                                  <Clock className="h-3 w-3" />
-                                                  {formatMinutesLabel(subtask.estimateMin)}
-                                                </span>
-                                              ) : null}
-                                            </div>
-                                          </div>
-                                        ))}
+                                                <Badge variant="outline">{statusLabel[subtask.status]}</Badge>
+                                              </div>
+                                              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                                {subtask.due ? (
+                                                  <span className="flex items-center gap-1">
+                                                    <CalendarDays className="h-3 w-3" />
+                                                    {format(parseISO(subtask.due), "MMM d")}
+                                                  </span>
+                                                ) : null}
+                                                {subtaskEstimate ? (
+                                                  <span className="flex items-center gap-1">
+                                                    <Clock className="h-3 w-3" />
+                                                    {subtaskEstimate}
+                                                  </span>
+                                                ) : null}
+                                                {(subtask.deps?.length ?? 0) > 0 ? (
+                                                  <span className="flex items-center gap-1">
+                                                    <GitCommit className="h-3 w-3" />
+                                                    {subtask.deps?.length ?? 0} deps
+                                                  </span>
+                                                ) : null}
+                                              </div>
+                                            </motion.div>
+                                          );
+                                        })}
                                       </motion.div>
                                     ) : null}
                                   </AnimatePresence>
@@ -711,8 +960,8 @@ export default function DreamPlannerApp() {
                 })}
               </div>
             ) : (
-              <Card className="border-slate-200">
-                <CardContent className="p-6 text-sm text-slate-600">
+              <Card className="border-slate-200 dark:border-slate-800/70 dark:bg-slate-900/60">
+                <CardContent className="p-6 text-sm text-slate-600 dark:text-slate-400">
                   No milestone tasks match your filters. Assign tasks to a milestone or adjust the search/risk toggles to see more work.
                 </CardContent>
               </Card>
@@ -736,26 +985,26 @@ export default function DreamPlannerApp() {
                   return (
                     <Card
                       key={summary.milestone.id}
-                      className="border-slate-200/80 shadow-sm"
+                      className="border-slate-200/80 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60"
                     >
                       <CardHeader>
                         <div className="flex items-start justify-between gap-2">
-                          <CardTitle className="text-lg font-semibold text-slate-800">
+                          <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-200">
                             {summary.milestone.title}
                           </CardTitle>
-                          <Badge variant="outline">{summary.milestone.id}</Badge>
+                          <TaskIdBadge id={summary.milestone.id} />
                         </div>
                         <CardDescription className="flex flex-wrap items-center gap-3 text-xs md:text-sm">
                           {milestoneDue ? (
-                            <span className="flex items-center gap-1.5 text-slate-600">
+                            <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
                               <CalendarDays className="h-4 w-4" />
                               {milestoneDue}
                             </span>
                           ) : (
-                            <span className="text-slate-500">No due date</span>
+                            <span className="text-slate-500 dark:text-slate-400">No due date</span>
                           )}
                           {estimateLabel ? (
-                            <span className="flex items-center gap-1.5 text-slate-600">
+                            <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
                               <Clock className="h-4 w-4" />
                               {estimateLabel}
                             </span>
@@ -764,7 +1013,7 @@ export default function DreamPlannerApp() {
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div>
-                          <div className="flex items-center justify-between text-xs text-slate-600">
+                          <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400">
                             <span>
                               {summary.total} tasks
                               {subtaskCount > 0
@@ -776,38 +1025,42 @@ export default function DreamPlannerApp() {
                           <Progress value={summary.progress} className="mt-2" />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3 text-xs text-slate-600">
-                          <div className="rounded-md border border-slate-200/70 bg-slate-50/40 p-2">
-                            <span className="block text-[11px] uppercase text-slate-500">
+                        <div className="grid grid-cols-2 gap-3 text-xs text-slate-600 dark:text-slate-400">
+                          <div className="rounded-md border border-slate-200/70 bg-slate-50/40 p-2 dark:border-slate-800/60 dark:bg-slate-900/40">
+                            <span className="block text-[11px] uppercase text-slate-500 dark:text-slate-400">
                               Active
                             </span>
-                            <span className="text-base font-semibold text-slate-800">
+                            <span className="text-base font-semibold text-slate-800 dark:text-slate-200">
                               {summary.activeCount}
                             </span>
                           </div>
-                          <div className="rounded-md border border-slate-200/70 bg-slate-50/40 p-2">
-                            <span className="block text-[11px] uppercase text-slate-500">
+                          <div className="rounded-md border border-slate-200/70 bg-slate-50/40 p-2 dark:border-slate-800/60 dark:bg-slate-900/40">
+                            <span className="block text-[11px] uppercase text-slate-500 dark:text-slate-400">
                               Completed
                             </span>
-                            <span className="text-base font-semibold text-slate-800">
+                            <span className="text-base font-semibold text-slate-800 dark:text-slate-200">
                               {summary.doneCount}
                             </span>
                           </div>
-                          <div className="rounded-md border border-slate-200/70 bg-slate-50/40 p-2">
-                            <span className="block text-[11px] uppercase text-slate-500">
+                          <div className="rounded-md border border-slate-200/70 bg-slate-50/40 p-2 dark:border-slate-800/60 dark:bg-slate-900/40">
+                            <span className="block text-[11px] uppercase text-slate-500 dark:text-slate-400">
                               At Risk
                             </span>
                             <span
-                              className={`text-base font-semibold ${summary.riskCount ? "text-amber-600" : "text-slate-700"}`}
+                              className={`text-base font-semibold ${
+                                summary.riskCount
+                                  ? "text-amber-600"
+                                  : "text-slate-700 dark:text-slate-300"
+                              }`}
                             >
                               {summary.riskCount}
                             </span>
                           </div>
-                          <div className="rounded-md border border-slate-200/70 bg-slate-50/40 p-2">
-                            <span className="block text-[11px] uppercase text-slate-500">
+                          <div className="rounded-md border border-slate-200/70 bg-slate-50/40 p-2 dark:border-slate-800/60 dark:bg-slate-900/40">
+                            <span className="block text-[11px] uppercase text-slate-500 dark:text-slate-400">
                               Next Due
                             </span>
-                            <span className="text-sm font-medium text-slate-700">
+                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
                               {nextDueLabel ?? "None"}
                             </span>
                           </div>
@@ -821,13 +1074,13 @@ export default function DreamPlannerApp() {
                           return (
                             <div
                               key={child.id}
-                              className="flex items-start justify-between gap-3 rounded-md border border-slate-200/80 bg-white/80 p-2"
+                              className="flex items-start justify-between gap-3 rounded-md border border-slate-200/80 bg-white/80 p-2 dark:border-slate-800/70 dark:bg-slate-900/60"
                             >
                               <div className="min-w-0 space-y-1">
-                                <p className="truncate text-sm font-medium text-slate-800">
+                                <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">
                                   {child.title}
                                 </p>
-                                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                                   {childDue ? (
                                     <span className="flex items-center gap-1">
                                       <CalendarDays className="h-3 w-3" />
@@ -844,7 +1097,7 @@ export default function DreamPlannerApp() {
                                     <Badge
                                       key={tag}
                                       variant="secondary"
-                                      className="bg-slate-100 text-slate-700"
+                                      className="bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-300"
                                     >
                                       #{tag}
                                     </Badge>
@@ -860,7 +1113,7 @@ export default function DreamPlannerApp() {
                           );
                         })}
                         {summary.directChildren.length > 4 ? (
-                          <div className="text-xs text-slate-500">
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
                             +{summary.directChildren.length - 4} more tracked tasks
                           </div>
                         ) : null}
@@ -870,8 +1123,8 @@ export default function DreamPlannerApp() {
                 })}
               </div>
             ) : (
-              <Card className="border-slate-200">
-                <CardContent className="p-6 text-sm text-slate-600">
+              <Card className="border-slate-200 dark:border-slate-800/70 dark:bg-slate-900/60">
+                <CardContent className="p-6 text-sm text-slate-600 dark:text-slate-400">
                   No milestones with assigned tasks yet.
                 </CardContent>
               </Card>
@@ -881,12 +1134,12 @@ export default function DreamPlannerApp() {
           <TabsContent value="schedule" className="space-y-4">
             {todayPlan.length ? (
               <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-                <Card className="border-slate-200/80 shadow-sm">
+                <Card className="border-slate-200/80 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60">
                   <CardHeader>
-                    <CardTitle className="text-lg font-semibold text-slate-800">
+                    <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-200">
                       Focus Blocks
                     </CardTitle>
-                    <CardDescription className="text-sm text-slate-600">
+                    <CardDescription className="text-sm text-slate-600 dark:text-slate-400">
                       {scheduleHeadline}
                     </CardDescription>
                   </CardHeader>
@@ -902,28 +1155,34 @@ export default function DreamPlannerApp() {
                         formatMinutesLabel(task.estimateMin ?? slotMinutes) ??
                         formatMinutesLabel(slotMinutes) ??
                         `${slotMinutes}m`;
+                      const isFocused = focusSet.has(task.id);
 
                       return (
                         <div
                           key={`${task.id}-${index}`}
-                          className="space-y-3 rounded-lg border border-slate-200/80 bg-white/90 p-3 shadow-sm"
+                          className={cn(
+                            "space-y-3 rounded-lg border border-slate-200/80 bg-white/90 p-3 shadow-sm transition dark:border-slate-800/70 dark:bg-slate-900/60",
+                            isFocused &&
+                              "border-pink-500/50 shadow-[0_10px_24px_rgba(236,72,153,0.2)]",
+                          )}
                         >
                           <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-sm font-medium text-slate-800">
-                              <Clock className="h-4 w-4 text-slate-500" />
+                            <div className="flex items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-200">
+                              <Clock className="h-4 w-4 text-slate-500 dark:text-slate-400" />
                               {startLabel} – {endLabel}
                             </div>
-                            <Pill
-                              className={`${prioHue[task.priority]} whitespace-nowrap capitalize`}
-                            >
+                            <Pill className={`${prioHue[task.priority]} whitespace-nowrap capitalize`}>
                               {task.priority}
                             </Pill>
                           </div>
-                          <div className="space-y-1">
-                            <div className="text-base font-semibold text-slate-900">
-                              {task.title}
+                          <div className="space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <TaskIdBadge id={task.id} />
+                              <div className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                                {task.title}
+                              </div>
                             </div>
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                               <span>{durationLabel}</span>
                               {task.due ? (
                                 <span className="flex items-center gap-1">
@@ -950,59 +1209,115 @@ export default function DreamPlannerApp() {
                     })}
                   </CardContent>
                 </Card>
-                <Card className="border-slate-200/80 shadow-sm">
-                  <CardHeader>
-                    <CardTitle className="text-lg font-semibold text-slate-800">
-                      Up Next
-                    </CardTitle>
-                    <CardDescription className="text-sm text-slate-600">
-                      Auto-prioritized from remaining queue
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {upNextTasks.length ? (
-                      upNextTasks.map((task) => {
-                        const dueLabel = task.due
-                          ? format(parseISO(task.due), "MMM d")
-                          : null;
-                        return (
-                          <div
-                            key={task.id}
-                            className="flex items-start justify-between gap-3 rounded-md border border-slate-200/80 bg-white/90 p-3"
-                          >
-                            <div className="min-w-0 space-y-1">
-                              <p className="truncate text-sm font-medium text-slate-800">
-                                {task.title}
-                              </p>
-                              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                                {dueLabel ? (
-                                  <span className="flex items-center gap-1">
-                                    <CalendarDays className="h-3 w-3" />
-                                    {dueLabel}
-                                  </span>
-                                ) : null}
-                                {task.estimateMin ? (
-                                  <span>{formatMinutesLabel(task.estimateMin)}</span>
-                                ) : null}
+                <div className="space-y-4">
+                  <Card className="border-slate-200/80 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60">
+                    <CardHeader>
+                      <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+                        Focus Queue
+                      </CardTitle>
+                      <CardDescription className="text-sm text-slate-600 dark:text-slate-400">
+                        Tasks you&apos;ve pinned for today
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {focusList.length ? (
+                        <ol className="space-y-2">
+                          {focusList.map((task, index) => (
+                            <li
+                              key={task.id}
+                              className="flex items-center justify-between gap-2 rounded-md border border-slate-200/70 bg-white/90 px-3 py-2 text-sm dark:border-slate-800/70 dark:bg-slate-900/60"
+                            >
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                                  {index + 1}.
+                                </span>
+                                <TaskIdBadge id={task.id} />
+                                <span className="truncate font-medium text-slate-800 dark:text-slate-200">
+                                  {task.title}
+                                </span>
                               </div>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => toggleFocusTask(task.id)}
+                              >
+                                Remove
+                              </Button>
+                            </li>
+                          ))}
+                        </ol>
+                      ) : (
+                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                          Pick a few tasks in the Tasks tab to build a focus queue.
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                  <Card className="border-slate-200/80 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60">
+                    <CardHeader>
+                      <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-200">
+                        Up Next
+                      </CardTitle>
+                      <CardDescription className="text-sm text-slate-600 dark:text-slate-400">
+                        Auto-prioritized from remaining queue
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {upNextTasks.length ? (
+                        upNextTasks.map((task) => {
+                          const dueLabel = task.due
+                            ? format(parseISO(task.due), "MMM d")
+                            : null;
+                          const estimateLabel = formatMinutesLabel(task.estimateMin);
+                          const isFocused = focusSet.has(task.id);
+                          return (
+                            <div
+                              key={task.id}
+                              className={cn(
+                                "flex items-start justify-between gap-3 rounded-md border border-slate-200/80 bg-white/90 p-3 dark:border-slate-800/70 dark:bg-slate-900/60",
+                                isFocused && "border-pink-500/50",
+                              )}
+                            >
+                              <div className="min-w-0 space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <TaskIdBadge id={task.id} />
+                                  <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">
+                                    {task.title}
+                                  </p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                                  {dueLabel ? (
+                                    <span className="flex items-center gap-1">
+                                      <CalendarDays className="h-3 w-3" />
+                                      {dueLabel}
+                                    </span>
+                                  ) : null}
+                                  {estimateLabel ? <span>{estimateLabel}</span> : null}
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant={isFocused ? "default" : "secondary"}
+                                onClick={() => toggleFocusTask(task.id)}
+                                aria-pressed={isFocused}
+                              >
+                                {isFocused ? "Planned" : "Plan today"}
+                              </Button>
                             </div>
-                            <Button size="sm" variant="secondary">
-                              Queue
-                            </Button>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <p className="text-sm text-slate-600">
-                        All priority work is already on today&apos;s plan. Nice!
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
+                          );
+                        })
+                      ) : (
+                        <p className="text-sm text-slate-600 dark:text-slate-400">
+                          All priority work is already on today&apos;s plan. Nice!
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
             ) : (
-              <Card className="border-slate-200">
-                <CardContent className="p-6 text-sm text-slate-600">
+              <Card className="border-slate-200 dark:border-slate-800/70 dark:bg-slate-900/60">
+                <CardContent className="p-6 text-sm text-slate-600 dark:text-slate-400">
                   No focus blocks scheduled yet. Add tasks to a milestone and give them due dates to generate a draft day plan.
                 </CardContent>
               </Card>
@@ -1011,38 +1326,41 @@ export default function DreamPlannerApp() {
 
           <TabsContent value="timeline" className="space-y-4">
             {timelineEntries.length ? (
-              <Card className="border-slate-200/80 shadow-sm">
+              <Card className="border-slate-200/80 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60">
                 <CardHeader>
-                  <CardTitle className="text-lg font-semibold text-slate-800">
+                  <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-200">
                     Delivery Timeline
                   </CardTitle>
-                  <CardDescription className="text-sm text-slate-600">
+                  <CardDescription className="text-sm text-slate-600 dark:text-slate-400">
                     Ordered by due date across all milestones
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="relative">
-                    <div className="absolute left-3 top-1 bottom-1 w-px bg-slate-200" />
+                    <div className="absolute left-3 top-1 bottom-1 w-px bg-slate-200 dark:bg-slate-800" />
                     <div className="space-y-6 pl-8">
                       {timelineEntries.map(({ task, dueDate }, index) => {
                         const dateLabel = format(dueDate, "EEE, MMM d");
                         const timeLabel = format(dueDate, "HH:mm");
                         return (
                           <div key={`${task.id}-${index}`} className="relative">
-                            <span className="absolute -left-8 flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white text-xs font-semibold text-slate-600">
+                            <span className="absolute -left-8 flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                               {task.priority.slice(0, 1).toUpperCase()}
                             </span>
-                            <div className="rounded-lg border border-slate-200/80 bg-white/90 p-3 shadow-sm">
-                              <div className="flex items-center justify-between text-xs text-slate-500">
-                                <span className="font-semibold text-slate-700">
+                            <div className="rounded-lg border border-slate-200/80 bg-white/90 p-3 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60">
+                              <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                                <span className="font-semibold text-slate-700 dark:text-slate-300">
                                   {dateLabel}
                                 </span>
                                 <span>{timeLabel}</span>
                               </div>
-                              <div className="mt-1 text-sm font-medium text-slate-800">
-                                {task.title}
+                              <div className="mt-1 flex flex-wrap items-center gap-2">
+                                <TaskIdBadge id={task.id} />
+                                <span className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                                  {task.title}
+                                </span>
                               </div>
-                              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                                 <Pill className={`${prioHue[task.priority]} lowercase`}>
                                   {task.priority}
                                 </Pill>
@@ -1067,8 +1385,8 @@ export default function DreamPlannerApp() {
                 </CardContent>
               </Card>
             ) : (
-              <Card className="border-slate-200">
-                <CardContent className="p-6 text-sm text-slate-600">
+              <Card className="border-slate-200 dark:border-slate-800/70 dark:bg-slate-900/60">
+                <CardContent className="p-6 text-sm text-slate-600 dark:text-slate-400">
                   Add due dates to tasks to visualize the timeline.
                 </CardContent>
               </Card>
@@ -1079,12 +1397,12 @@ export default function DreamPlannerApp() {
             value="activity"
             className="grid gap-4 lg:grid-cols-[2fr_1fr]"
           >
-            <Card className="border-slate-200/80 shadow-sm">
+            <Card className="border-slate-200/80 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60">
               <CardHeader>
-                <CardTitle className="text-lg font-semibold text-slate-800">
+                <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-200">
                   Status Overview
                 </CardTitle>
-                <CardDescription className="text-sm text-slate-600">
+                <CardDescription className="text-sm text-slate-600 dark:text-slate-400">
                   Snapshot of ClickUp workflow buckets
                 </CardDescription>
               </CardHeader>
@@ -1095,7 +1413,7 @@ export default function DreamPlannerApp() {
                     return (
                       <div
                         key={status}
-                        className="rounded-md border border-dashed border-slate-200 p-3 text-xs text-slate-500"
+                        className="rounded-md border border-dashed border-slate-200 p-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400"
                       >
                         {statusLabel[status]} is empty.
                       </div>
@@ -1105,10 +1423,10 @@ export default function DreamPlannerApp() {
                   return (
                     <div
                       key={status}
-                      className="space-y-2 rounded-lg border border-slate-200/80 bg-white/90 p-3"
+                      className="space-y-2 rounded-lg border border-slate-200/80 bg-white/90 p-3 dark:border-slate-800/70 dark:bg-slate-900/60"
                     >
                       <div className="flex items-center justify-between text-sm">
-                        <span className="font-semibold text-slate-800">
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
                           {statusLabel[status]}
                         </span>
                         <Badge variant="outline">{bucket.length}</Badge>
@@ -1124,10 +1442,10 @@ export default function DreamPlannerApp() {
                               className="flex items-start justify-between gap-3"
                             >
                               <div className="min-w-0 space-y-1">
-                                <p className="truncate text-sm font-medium text-slate-800">
+                                <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">
                                   {task.title}
                                 </p>
-                                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                                   {dueLabel ? (
                                     <span className="flex items-center gap-1">
                                       <CalendarDays className="h-3 w-3" />
@@ -1149,7 +1467,7 @@ export default function DreamPlannerApp() {
                         })}
                       </div>
                       {bucket.length > 3 ? (
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
                           +{bucket.length - 3} more
                         </div>
                       ) : null}
@@ -1158,12 +1476,12 @@ export default function DreamPlannerApp() {
                 })}
               </CardContent>
             </Card>
-            <Card className="border-slate-200/80 shadow-sm">
+            <Card className="border-slate-200/80 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60">
               <CardHeader>
-                <CardTitle className="text-lg font-semibold text-slate-800">
+                <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-200">
                   Recent Activity
                 </CardTitle>
-                <CardDescription className="text-sm text-slate-600">
+                <CardDescription className="text-sm text-slate-600 dark:text-slate-400">
                   Sync code, docs, and task updates here
                 </CardDescription>
               </CardHeader>
@@ -1172,19 +1490,19 @@ export default function DreamPlannerApp() {
                   commits.map((entry) => (
                     <div
                       key={entry.id}
-                      className="flex items-start gap-3 rounded-md border border-slate-200/80 bg-white/90 p-3"
+                      className="flex items-start gap-3 rounded-md border border-slate-200/80 bg-white/90 p-3 dark:border-slate-800/70 dark:bg-slate-900/60"
                     >
-                      <GitCommit className="h-5 w-5 text-slate-500" />
+                      <GitCommit className="h-5 w-5 text-slate-500 dark:text-slate-400" />
                       <div className="space-y-1">
-                        <div className="text-sm font-semibold text-slate-800">
+                        <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                           {entry.msg}
                         </div>
-                        <div className="text-xs text-slate-500">{entry.time}</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">{entry.time}</div>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="rounded-md border border-dashed border-slate-200 p-4 text-sm text-slate-600">
+                  <div className="rounded-md border border-dashed border-slate-200 p-4 text-sm text-slate-600 dark:border-slate-800 dark:text-slate-400">
                     No recent repo updates yet. Connect your GitHub workflow to surface commits and deploys.
                   </div>
                 )}
@@ -1196,7 +1514,7 @@ export default function DreamPlannerApp() {
           </TabsContent>
         </Tabs>
 
-        <footer className="pt-4 text-xs text-slate-500">
+        <footer className="pt-4 text-xs text-slate-500 dark:text-slate-400">
           Pro tip: swap the ClickUp mock with live data via React Query, then wire “Block on Calendar” to an ICS route.
         </footer>
       </div>
