@@ -33,7 +33,6 @@ import {
   AlertTriangle,
   LayoutGrid,
   ListChecks,
-  ChevronDown,
   ChevronRight,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -489,10 +488,11 @@ export default function DreamPlannerApp() {
 
   return (
     <div
-      className="min-h-screen w-full bg-gradient-to-b from-slate-50 to-white p-6 text-slate-900 transition-colors duration-300 dark:from-[#05070e] dark:via-[#090e1a] dark:to-[#05070e] dark:text-slate-100 md:p-10"
+      className="min-h-screen w-full p-6 text-slate-900 transition-colors duration-300 dark:text-slate-100 md:p-10"
+      style={{ backgroundColor: "hsl(var(--background))" }}
     >
-      <div className="mx-auto max-w-7xl space-y-6">
-        <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <div className="mx-auto max-w-7xl space-y-10">
+        <header className="flex flex-col gap-6 pb-2 md:flex-row md:items-end md:justify-between">
           <div>
             <h1 className="flex items-center gap-3 text-3xl font-bold tracking-tight md:text-4xl">
               <LayoutGrid className="h-7 w-7" /> DreamPlanner
@@ -537,24 +537,26 @@ export default function DreamPlannerApp() {
         </header>
 
         {isLoading && (
-          <Card className="border-amber-200 bg-amber-50 dark:border-amber-500/60 dark:bg-amber-500/10">
-            <CardContent className="p-4 text-sm text-amber-700 dark:text-amber-300">
+          <Card className="relative overflow-hidden border-amber-300/50 text-amber-700 dark:border-amber-400/40 dark:text-amber-200">
+            <span className="pointer-events-none absolute inset-0 bg-gradient-to-br from-amber-100/40 via-transparent to-transparent dark:from-amber-500/10" />
+            <CardContent className="relative z-10 p-4 text-sm text-amber-700 dark:text-amber-300">
               Pulling tasks from ClickUp…
             </CardContent>
           </Card>
         )}
 
         {error && (
-          <Card className="border-red-200 bg-red-50 dark:border-red-500/60 dark:bg-red-500/10">
-            <CardContent className="p-4 text-sm text-red-700 dark:text-red-300">
+          <Card className="relative overflow-hidden border-red-300/60 text-red-700 dark:border-red-500/45 dark:text-red-300">
+            <span className="pointer-events-none absolute inset-0 bg-gradient-to-br from-red-100/35 via-transparent to-transparent dark:from-red-500/10" />
+            <CardContent className="relative z-10 p-4 text-sm text-red-700 dark:text-red-300">
               Failed to fetch tasks. Check your <code>.env.local</code> and reload.
             </CardContent>
           </Card>
         )}
 
-        <Card className="border-slate-200 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60">
+        <Card className="card-ghost border border-white/40 dark:border-white/5">
           <CardContent className="p-4 md:p-6">
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-5 md:grid-cols-4">
               <div className="md:col-span-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
@@ -578,7 +580,7 @@ export default function DreamPlannerApp() {
         </Card>
 
         <Tabs value={tab} onValueChange={setTab} className="w-full">
-          <TabsList className="flex-wrap">
+          <TabsList className="flex-wrap gap-3 pb-1">
             <TabsTrigger value="tasks">Tasks</TabsTrigger>
             <TabsTrigger value="milestones">Milestones</TabsTrigger>
             <TabsTrigger value="schedule">Schedule</TabsTrigger>
@@ -586,9 +588,9 @@ export default function DreamPlannerApp() {
             <TabsTrigger value="activity">Activity</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="tasks" className="space-y-4">
+          <TabsContent value="tasks" className="space-y-6">
             {filteredMilestones.length ? (
-              <div className="space-y-6">
+              <div className="space-y-8">
                 {filteredMilestones.map(({ milestone, tasks }) => {
                   const milestoneDue = milestone.due
                     ? format(parseISO(milestone.due), "MMM d, HH:mm")
@@ -597,7 +599,7 @@ export default function DreamPlannerApp() {
                   return (
                     <section
                       key={milestone.id}
-                      className="space-y-3 rounded-lg border border-slate-200/70 bg-white/70 p-4 shadow-sm dark:border-slate-800/60 dark:bg-slate-900/60"
+                      className="glass-panel space-y-4 rounded-lg p-5"
                     >
                       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                         <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300">
@@ -642,8 +644,8 @@ export default function DreamPlannerApp() {
                               >
                                 <Card
                                   className={cn(
-                                    "h-full border border-slate-200/70 bg-white/95 transition hover:border-pink-300 hover:shadow-lg dark:border-slate-800/60 dark:bg-slate-900/60 dark:hover:border-pink-400/40",
-                                    isFocused && "border-pink-500/50 shadow-[0_12px_28px_rgba(236,72,153,0.22)]",
+                                    "h-full border border-white/50 transition hover:border-pink-300/70 hover:shadow-[0_18px_40px_rgba(236,72,153,0.18)] dark:border-white/10 dark:hover:border-pink-400/50",
+                                    isFocused && "border-pink-500/60 shadow-[0_14px_32px_rgba(236,72,153,0.28)]",
                                   )}
                                 >
                                   <CardHeader className="pb-3">
@@ -679,7 +681,7 @@ export default function DreamPlannerApp() {
                                       <Badge variant="outline">{statusLabel[task.status]}</Badge>
                                     </CardDescription>
                                   </CardHeader>
-                                  <CardContent className="space-y-3">
+                                  <CardContent className="space-y-4">
                                     {task.tags && task.tags.length ? (
                                       <div className="flex flex-wrap gap-1">
                                         {task.tags.map((tag) => (
@@ -759,7 +761,7 @@ export default function DreamPlannerApp() {
                             >
                               <Card
                                 className={cn(
-                                  "group relative h-full overflow-hidden border border-pink-500/25 bg-white/95 shadow-[0_18px_45px_rgba(15,23,42,0.12)] transition-all hover:border-pink-400/45 hover:shadow-[0_20px_54px_rgba(236,72,153,0.2)] dark:border-pink-400/25 dark:bg-slate-900/70",
+                                  "group relative h-full overflow-hidden border border-pink-500/30 shadow-[0_18px_45px_rgba(15,23,42,0.12)] transition-all hover:border-pink-400/45 hover:shadow-[0_20px_54px_rgba(236,72,153,0.2)] dark:border-pink-400/30",
                                   isFocused && "border-pink-400/60 shadow-[0_22px_60px_rgba(236,72,153,0.25)]",
                                 )}
                               >
@@ -813,14 +815,16 @@ export default function DreamPlannerApp() {
                                         aria-expanded={isExpanded}
                                         aria-controls={`subtasks-${task.id}`}
                                         aria-label={isExpanded ? "Hide subtasks" : "Show subtasks"}
-                                        className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-pink-400/70 hover:bg-pink-50/60 hover:text-pink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-400 focus-visible:ring-offset-2 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-pink-400/60 dark:hover:bg-pink-500/10 dark:hover:text-pink-100"
+                                        className="glass-tile inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-500 transition hover:border-pink-400/70 hover:text-pink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-400 focus-visible:ring-offset-2 dark:text-slate-300 dark:hover:border-pink-400/60 dark:hover:text-pink-100"
                                         data-no-toggle
                                       >
-                                        {isExpanded ? (
-                                          <ChevronDown className="h-4 w-4" />
-                                        ) : (
+                                        <motion.span
+                                          animate={{ rotate: isExpanded ? 90 : 0 }}
+                                          transition={{ duration: 0.2, ease: "easeOut" }}
+                                          className="inline-flex"
+                                        >
                                           <ChevronRight className="h-4 w-4" />
-                                        )}
+                                        </motion.span>
                                       </button>
                                     </div>
                                   </div>
@@ -850,19 +854,19 @@ export default function DreamPlannerApp() {
                                       <Progress value={aggregatedProgress} className="mt-1 h-2 rounded-full" />
                                     </div>
                                     <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 dark:text-slate-400">
-                                      <div className="rounded-md border border-slate-200/70 bg-white/80 p-2 text-center dark:border-slate-800/60 dark:bg-slate-900/60">
+                                      <div className="glass-tile rounded-md p-2 text-center">
                                         <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{inFlightSubtasks}</p>
                                         <p>In progress</p>
                                       </div>
-                                      <div className="rounded-md border border-slate-200/70 bg-white/80 p-2 text-center dark:border-slate-800/60 dark:bg-slate-900/60">
+                                      <div className="glass-tile rounded-md p-2 text-center">
                                         <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{reviewSubtasks}</p>
                                         <p>Review</p>
                                       </div>
-                                      <div className="rounded-md border border-slate-200/70 bg-white/80 p-2 text-center dark:border-slate-800/60 dark:bg-slate-900/60">
+                                      <div className="glass-tile rounded-md p-2 text-center">
                                         <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{todoSubtasks}</p>
                                         <p>Queued</p>
                                       </div>
-                                      <div className="rounded-md border border-slate-200/70 bg-white/80 p-2 text-center dark:border-slate-800/60 dark:bg-slate-900/60">
+                                      <div className="glass-tile rounded-md p-2 text-center">
                                         <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{blockedCount}</p>
                                         <p>Blocked</p>
                                       </div>
@@ -911,7 +915,7 @@ export default function DreamPlannerApp() {
                                         animate={{ height: "auto", opacity: 1 }}
                                         exit={{ height: 0, opacity: 0 }}
                                         transition={{ duration: 0.25, ease: "easeOut" }}
-                                        className="space-y-2 overflow-hidden pl-1 pt-1"
+                                        className="space-y-3 overflow-hidden pl-1 pt-2"
                                       >
                                         {subtasks.map((subtask, index) => {
                                           const subtaskEstimate = formatMinutesLabel(subtask.estimateMin);
@@ -922,7 +926,7 @@ export default function DreamPlannerApp() {
                                               animate={{ opacity: 1, y: 0, scale: 1 }}
                                               exit={{ opacity: 0, y: -8, scale: 0.98 }}
                                               transition={{ duration: 0.18, ease: "easeOut", delay: index * 0.03 }}
-                                              className="relative overflow-hidden rounded-lg border border-slate-200/70 bg-gradient-to-br from-slate-50 to-white p-3 text-sm shadow-sm dark:border-slate-800/60 dark:from-slate-900/60 dark:to-slate-900/80"
+                                              className="glass-tile relative overflow-hidden rounded-lg p-3 text-sm transition-shadow hover:shadow-[0_12px_30px_-12px_rgba(15,23,42,0.25)]"
                                             >
                                               <span
                                                 aria-hidden
@@ -971,7 +975,7 @@ export default function DreamPlannerApp() {
                 })}
               </div>
             ) : (
-              <Card className="border-slate-200 dark:border-slate-800/70 dark:bg-slate-900/60">
+              <Card className="border-white/50 dark:border-white/10">
                 <CardContent className="p-6 text-sm text-slate-600 dark:text-slate-400">
                   No milestone tasks match your filters. Assign tasks to a milestone or adjust the search/risk toggles to see more work.
                 </CardContent>
@@ -1084,7 +1088,7 @@ export default function DreamPlannerApp() {
                           return (
                             <div
                               key={child.id}
-                              className="flex items-start justify-between gap-3 rounded-md border border-slate-200/80 bg-white/80 p-2 dark:border-slate-800/70 dark:bg-slate-900/60"
+                      className="glass-tile flex items-start justify-between gap-3 rounded-md p-2"
                             >
                               <div className="min-w-0 space-y-1">
                                 <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-200">
@@ -1133,7 +1137,7 @@ export default function DreamPlannerApp() {
                 })}
               </div>
             ) : (
-              <Card className="border-slate-200 dark:border-slate-800/70 dark:bg-slate-900/60">
+              <Card className="border-white/50 dark:border-white/10">
                 <CardContent className="p-6 text-sm text-slate-600 dark:text-slate-400">
                   No milestones with assigned tasks yet.
                 </CardContent>
@@ -1144,7 +1148,7 @@ export default function DreamPlannerApp() {
           <TabsContent value="schedule" className="space-y-4">
             {todayPlan.length ? (
               <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
-                <Card className="border-slate-200/80 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60">
+                <Card className="border-white/40 dark:border-white/10">
                   <CardHeader>
                     <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-200">
                       Focus Blocks
@@ -1171,7 +1175,7 @@ export default function DreamPlannerApp() {
                         <div
                           key={`${task.id}-${index}`}
                           className={cn(
-                            "space-y-3 rounded-lg border border-slate-200/80 bg-white/90 p-3 shadow-sm transition dark:border-slate-800/70 dark:bg-slate-900/60",
+                            "glass-panel space-y-3 rounded-lg p-3 transition",
                             isFocused &&
                             "border-pink-500/50 shadow-[0_10px_24px_rgba(236,72,153,0.2)]",
                           )}
@@ -1220,7 +1224,7 @@ export default function DreamPlannerApp() {
                   </CardContent>
                 </Card>
                 <div className="space-y-4">
-                  <Card className="border-slate-200/80 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60">
+                  <Card className="border-white/40 dark:border-white/10">
                     <CardHeader>
                       <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-200">
                         Focus Queue
@@ -1235,7 +1239,7 @@ export default function DreamPlannerApp() {
                           {focusList.map((task, index) => (
                             <li
                               key={task.id}
-                              className="flex items-center justify-between gap-2 rounded-md border border-slate-200/70 bg-white/90 px-3 py-2 text-sm dark:border-slate-800/70 dark:bg-slate-900/60"
+                              className="glass-tile flex items-center justify-between gap-2 rounded-md px-3 py-2 text-sm"
                             >
                               <div className="flex min-w-0 items-center gap-2">
                                 <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
@@ -1263,7 +1267,7 @@ export default function DreamPlannerApp() {
                       )}
                     </CardContent>
                   </Card>
-                  <Card className="border-slate-200/80 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60">
+                  <Card className="border-white/40 dark:border-white/10">
                     <CardHeader>
                       <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-200">
                         Up Next
@@ -1284,8 +1288,8 @@ export default function DreamPlannerApp() {
                             <div
                               key={task.id}
                               className={cn(
-                                "flex items-start justify-between gap-3 rounded-md border border-slate-200/80 bg-white/90 p-3 dark:border-slate-800/70 dark:bg-slate-900/60",
-                                isFocused && "border-pink-500/50",
+                                "glass-tile flex items-start justify-between gap-3 rounded-md p-3",
+                                isFocused && "border-pink-500/60",
                               )}
                             >
                               <div className="min-w-0 space-y-1">
@@ -1326,7 +1330,7 @@ export default function DreamPlannerApp() {
                 </div>
               </div>
             ) : (
-              <Card className="border-slate-200 dark:border-slate-800/70 dark:bg-slate-900/60">
+              <Card className="border-white/50 dark:border-white/10">
                 <CardContent className="p-6 text-sm text-slate-600 dark:text-slate-400">
                   No focus blocks scheduled yet. Add tasks to a milestone and give them due dates to generate a draft day plan.
                 </CardContent>
@@ -1336,7 +1340,7 @@ export default function DreamPlannerApp() {
 
           <TabsContent value="timeline" className="space-y-4">
             {timelineEntries.length ? (
-              <Card className="border-slate-200/80 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60">
+              <Card className="border-white/40 dark:border-white/10">
                 <CardHeader>
                   <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-200">
                     Delivery Timeline
@@ -1354,10 +1358,10 @@ export default function DreamPlannerApp() {
                         const timeLabel = format(dueDate, "HH:mm");
                         return (
                           <div key={`${task.id}-${index}`} className="relative">
-                            <span className="absolute -left-8 flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white text-xs font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                            <span className="glass-tile absolute -left-8 flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold text-slate-600 dark:text-slate-300">
                               {task.priority.slice(0, 1).toUpperCase()}
                             </span>
-                            <div className="rounded-lg border border-slate-200/80 bg-white/90 p-3 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60">
+                            <div className="glass-panel rounded-lg p-3">
                               <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                                 <span className="font-semibold text-slate-700 dark:text-slate-300">
                                   {dateLabel}
@@ -1395,7 +1399,7 @@ export default function DreamPlannerApp() {
                 </CardContent>
               </Card>
             ) : (
-              <Card className="border-slate-200 dark:border-slate-800/70 dark:bg-slate-900/60">
+              <Card className="border-white/50 dark:border-white/10">
                 <CardContent className="p-6 text-sm text-slate-600 dark:text-slate-400">
                   Add due dates to tasks to visualize the timeline.
                 </CardContent>
@@ -1407,7 +1411,7 @@ export default function DreamPlannerApp() {
             value="activity"
             className="grid gap-4 lg:grid-cols-[2fr_1fr]"
           >
-            <Card className="border-slate-200/80 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60">
+            <Card className="border-white/40 dark:border-white/10">
               <CardHeader>
                 <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-200">
                   Status Overview
@@ -1433,7 +1437,7 @@ export default function DreamPlannerApp() {
                   return (
                     <div
                       key={status}
-                      className="space-y-2 rounded-lg border border-slate-200/80 bg-white/90 p-3 dark:border-slate-800/70 dark:bg-slate-900/60"
+                      className="glass-panel space-y-2 rounded-lg p-3"
                     >
                       <div className="flex items-center justify-between text-sm">
                         <span className="font-semibold text-slate-800 dark:text-slate-200">
@@ -1486,7 +1490,7 @@ export default function DreamPlannerApp() {
                 })}
               </CardContent>
             </Card>
-            <Card className="border-slate-200/80 shadow-sm dark:border-slate-800/70 dark:bg-slate-900/60">
+            <Card className="border-white/40 dark:border-white/10">
               <CardHeader>
                 <CardTitle className="text-lg font-semibold text-slate-800 dark:text-slate-200">
                   Recent Activity
@@ -1500,7 +1504,7 @@ export default function DreamPlannerApp() {
                   commits.map((entry) => (
                     <div
                       key={entry.id}
-                      className="flex items-start gap-3 rounded-md border border-slate-200/80 bg-white/90 p-3 dark:border-slate-800/70 dark:bg-slate-900/60"
+                      className="glass-tile flex items-start gap-3 rounded-md p-3"
                     >
                       <GitCommit className="h-5 w-5 text-slate-500 dark:text-slate-400" />
                       <div className="space-y-1">
