@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const states = new Map<string, number>(); // simple demo store
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
     const state = crypto.randomUUID();
     states.set(state, Date.now() + 5 * 60_000); // valid 5 min
 

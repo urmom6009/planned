@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
             code,
         }),
     });
-    const tokenJson = await tokenResp.json();
+    const _tokenJson = await tokenResp.json();
 
     // TODO: store tokenJson securely (DB/KV, encrypted) and fetch default list IDs
     const userId = crypto.randomUUID(); // link to your user model
