@@ -1,49 +1,43 @@
-import { NextRequest, NextResponse } from "next/server";
-import { SignJWT } from "jose";
+import { NextResponse } from "next/server";
+import crypto from "node:crypto";
 
-const ENC = new TextEncoder();
+const SECRET = process.env.MAGIC_SECRET_EXCHANGE; // ✅ matches Vercel
 
-async function hmacB64url(secret: string, msg: string) {
-    const key = await crypto.subtle.importKey(
-        "raw",
-        ENC.encode(secret),
-        { name: "HMAC", hash: "SHA-256" },
-        false,
-        ["sign"]
-    );
-    const sig = await crypto.subtle.sign("HMAC", key, ENC.encode(msg));
-    return Buffer.from(sig)
-        .toString("base64")
-        .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-export async function GET(req: NextRequest) {
-    const { searchParams } = new URL(req.url);
-    const nonce = searchParams.get("nonce") || "";
-    const sig = searchParams.get("sig") || "";
-
-    const secret = process.env.MAGIC_EXCHANGE_SECRET!;
-    if (!secret) {
-        return NextResponse.json({ error: "server misconfig" }, { status: 500 });
+export async function GET(req: Request) {
+    if (!SECRET) {
+        return NextResponse.json({ error: "Server not configured" }, { status: 500 });
     }
 
-    // verify sig = HMAC(secret, nonce)
-    const expected = await hmacB64url(secret, nonce);
-    if (!nonce || !sig || sig !== expected) {
-        return NextResponse.json({ error: "bad signature" }, { status: 403 });
+    const url = new URL(req.url);
+    const nonce = url.searchParams.get("nonce") ?? "";
+    const sig = url.searchParams.get("sig") ?? "";
+    const expStr = url.searchParams.get("exp") ?? "";
+    const exp = Number(expStr);
+
+    if (!nonce || !sig || !exp || Number.isNaN(exp)) {
+        return NextResponse.json({ error: "Missing params" }, { status: 400 });
+    }
+    if (exp < Math.floor(Date.now() / 1000)) {
+        return NextResponse.json({ error: "Link expired" }, { status: 400 });
     }
 
-    // Issue an app token (JWT) the app can store in keychain as APP_TOKEN
-    const appSecret = process.env.MAGIC_LINK_SECRET!;
-    if (!appSecret) {
-        return NextResponse.json({ error: "server misconfig" }, { status: 500 });
+    // recompute signature and timing-safe compare
+    const expected = crypto
+        .createHmac("sha256", SECRET)
+        .update(`${nonce}|${exp}`)
+        .digest("base64url");
+
+    const ok =
+        expected.length === sig.length &&
+        crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(sig));
+
+    if (!ok) {
+        return NextResponse.json({ error: "Bad signature" }, { status: 400 });
     }
 
-    const token = await new SignJWT({ sub: "dreamplanner", n: nonce })
-        .setProtectedHeader({ alg: "HS256" })
-        .setIssuedAt()
-        .setExpirationTime("7d")
-        .sign(ENC.encode(appSecret));
+    // mint an app token (example: random opaque)
+    const token = crypto.randomBytes(32).toString("base64url");
 
+    // You can also Set-Cookie here if you prefer a cookie session.
     return NextResponse.json({ token });
 }
