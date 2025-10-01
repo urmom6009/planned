@@ -10,6 +10,7 @@ const PUBLIC_PATHS = [
     "/login",
     "/manifest.webmanifest",
     "/api/magiclink",
+    "/api/ping",
     "/api/setup/exchange",
     "/api/auth/clickup/start",     // <— add
     "/api/auth/clickup/callback",  // <— add
