@@ -12,6 +12,7 @@ const PUBLIC_PATHS = [
     "/api/magiclink",
     "/api/ping",
     "/api/ai/test",
+    "/api/clickup/lists",
     "/api/setup/exchange",
     "/api/auth/clickup/start",     // <— add
     "/api/auth/clickup/callback",  // <— add
