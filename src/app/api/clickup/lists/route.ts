@@ -1,99 +1,83 @@
 // src/app/api/clickup/lists/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from 'next/server';
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+type ClickUpList = { id: string; name: string };
+type ClickUpSpace = { id: string; name: string };
+type ClickUpFolder = { id: string; name: string };
+type ClickUpFolderList = { id: string; name: string };
+type ClickUpFolderlessList = { id: string; name: string };
 
-const CU = "https://api.clickup.com/api/v2";
-
-// Strategy: if you have per-user tokens, read them from your session/JWT.
-// For now, fall back to a server-wide token for development.
-function resolveClickUpToken(req: Request) {
-    // 1) Prefer per-user token from your app session (if you implemented that)
-    // const auth = req.headers.get("authorization");
-    // if (auth?.startsWith("Bearer ")) { return auth.slice(7); }
-
-    // 2) Dev fallback (single-user):
-    const token = process.env.CLICKUP_API_TOKEN;
-    return token || "";
-}
-
-// Optional: mark which team is work/personal (future balance rules)
-const WORK_TEAM_ID = process.env.CLICKUP_WORK_TEAM_ID || "";
-const PERSONAL_TEAM_ID = process.env.CLICKUP_PERSONAL_TEAM_ID || "";
-
-async function cuFetch<T>(path: string, token: string): Promise<T> {
-    const res = await fetch(`${CU}${path}`, {
-        headers: { Authorization: token, "Content-Type": "application/json" },
-        cache: "no-store",
+// Utility: typed fetch JSON
+async function fetchJSON<T>(url: string, token: string): Promise<T> {
+    const res = await fetch(url, {
+        headers: { Authorization: token.startsWith('Bearer') ? token : `Bearer ${token}` },
+        // ClickUp wants JSON; GETs do not need content-type.
+        next: { revalidate: 0 }, // Avoid caching in build
     });
     if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`ClickUp ${path} ${res.status}: ${body}`);
+        const text = await res.text().catch(() => '');
+        throw new Error(`ClickUp ${res.status} ${res.statusText} at ${url}: ${text}`);
     }
-    return res.json();
+    return (await res.json()) as T;
 }
 
-export async function GET(req: Request) {
-    const token = resolveClickUpToken(req);
-    if (!token) {
-        return NextResponse.json({ error: "No ClickUp token available" }, { status: 401 });
-    }
-
+export async function GET(req: NextRequest) {
     try {
-        // 1) Teams (workspaces)
-        const teamsResp = await cuFetch<{ teams: Array<{ id: string; name: string }> }>(`/team`, token);
-        const teams = teamsResp.teams || [];
-
-        // 2) For each team → spaces
-        const groups: Array<{ domain: "work" | "personal" | "unknown"; teamId: string; teamName: string; lists: Array<{ id: string; name: string; spaceId: string; spaceName: string }> }> = [];
-
-        for (const team of teams) {
-            const spacesResp = await cuFetch<{ spaces: Array<{ id: string; name: string }> }>(
-                `/team/${team.id}/space?archived=false`,
-                token
-            );
-            const spaces = spacesResp.spaces || [];
-
-            const lists: Array<{ id: string; name: string; spaceId: string; spaceName: string }> = [];
-
-            for (const space of spaces) {
-                // 3a) Folderless lists under space
-                const folderless = await cuFetch<{ lists: Array<{ id: string; name: string }> }>(
-                    `/space/${space.id}/list?archived=false`,
-                    token
-                );
-                for (const l of folderless.lists || []) {
-                    lists.push({ id: l.id, name: l.name, spaceId: space.id, spaceName: space.name });
-                }
-
-                // 3b) Folder lists under space
-                const foldersResp = await cuFetch<{ folders: Array<{ id: string; name: string }> }>(
-                    `/space/${space.id}/folder?archived=false`,
-                    token
-                );
-                for (const f of foldersResp.folders || []) {
-                    const inFolder = await cuFetch<{ lists: Array<{ id: string; name: string }> }>(
-                        `/folder/${f.id}/list?archived=false`,
-                        token
-                    );
-                    for (const l of inFolder.lists || []) {
-                        lists.push({ id: l.id, name: l.name, spaceId: space.id, spaceName: space.name });
-                    }
-                }
-            }
-
-            const domain =
-                team.id === WORK_TEAM_ID ? "work" :
-                    team.id === PERSONAL_TEAM_ID ? "personal" : "unknown";
-
-            groups.push({
-                domain, teamId: team.id, teamName: team.name, lists
-            });
+        // 1) Resolve ClickUp token
+        // Prefer bearer auth from request; fall back to env CLICKUP_API_TOKEN for testing.
+        const authHeader = req.headers.get('authorization') ?? '';
+        const bearer = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : process.env.CLICKUP_API_TOKEN;
+        if (!bearer) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        return NextResponse.json({ groups });
-    } catch (err: any) {
-        return NextResponse.json({ error: err.message || "ClickUp Error" }, { status: 500 });
+        // 2) Team (workspace) to enumerate from
+        const teamId = process.env.CLICKUP_TEAM_ID;
+        if (!teamId) {
+            return NextResponse.json({ error: 'Server not configured: missing CLICKUP_TEAM_ID' }, { status: 500 });
+        }
+
+        // 3) Pull spaces in the team
+        // GET /api/v2/team/{team_id}/space
+        const spacesResp = await fetchJSON<{ spaces: ClickUpSpace[] }>(
+            `https://api.clickup.com/api/v2/team/${teamId}/space`,
+            bearer
+        );
+
+        const allLists: ClickUpList[] = [];
+
+        for (const space of spacesResp.spaces) {
+            // Folderless lists in the space
+            // GET /api/v2/space/{space_id}/list?archived=false
+            const folderless = await fetchJSON<{ lists: ClickUpFolderlessList[] }>(
+                `https://api.clickup.com/api/v2/space/${space.id}/list?archived=false`,
+                bearer
+            );
+            allLists.push(...folderless.lists.map(l => ({ id: l.id, name: l.name })));
+
+            // Folders in the space
+            // GET /api/v2/space/{space_id}/folder
+            const folders = await fetchJSON<{ folders: (ClickUpFolder & { lists?: ClickUpFolderList[] })[] }>(
+                `https://api.clickup.com/api/v2/space/${space.id}/folder`,
+                bearer
+            );
+
+            // Lists within each folder
+            for (const f of folders.folders) {
+                if (!f.id) continue;
+                // GET /api/v2/folder/{folder_id}/list
+                const inFolder = await fetchJSON<{ lists: ClickUpFolderList[] }>(
+                    `https://api.clickup.com/api/v2/folder/${f.id}/list`,
+                    bearer
+                );
+                allLists.push(...inFolder.lists.map(l => ({ id: l.id, name: `${f.name} / ${l.name}` })));
+            }
+        }
+
+        // 4) Return normalized {id,name}[]
+        return NextResponse.json(allLists, { status: 200 });
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }
