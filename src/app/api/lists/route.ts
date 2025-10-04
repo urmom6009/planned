@@ -1,21 +1,26 @@
-// src/app/api/lists/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getBearer } from "@/lib/auth";
-import { Store } from "@/lib/store";
+import { requireBearer } from "@/lib/auth";
+import { prisma } from "@/lib/store";
 
+// make sure this route runs on the server runtime
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-    if (!getBearer(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    return NextResponse.json(Store.listAll(), { status: 200 });
-}
+    try {
+        // require caller to send Authorization: Bearer <APP_TOKEN>
+        requireBearer(req);
 
-export async function POST(req: NextRequest) {
-    if (!getBearer(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const body = await req.json().catch(() => ({}));
-    const name = (body?.name || "").trim();
-    if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
-    const list = Store.createList(name);
-    return NextResponse.json(list, { status: 201 });
+        // Example: return all lists from DB (adjust table name to your schema)
+        // If you followed earlier Prisma schema, you may have `List` or similar:
+        // const lists = await prisma.list.findMany({ select: { id: true, name: true } });
+
+        // If you don't have a List model yet, return an empty array for now:
+        const lists: Array<{ id: string; name: string }> = [];
+
+        return NextResponse.json(lists, { status: 200 });
+    } catch (err: any) {
+        const status = Number(err?.status) || 500;
+        return NextResponse.json({ error: err?.message ?? "Server error" }, { status });
+    }
 }
