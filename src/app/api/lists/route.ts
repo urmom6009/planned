@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireBearer } from "@/lib/auth";
-import { prisma } from "@/lib/store";
+// import { prisma } from "@/lib/store";
 
 // make sure this route runs on the server runtime
 export const runtime = "nodejs";
@@ -19,8 +19,9 @@ export async function GET(req: NextRequest) {
         const lists: Array<{ id: string; name: string }> = [];
 
         return NextResponse.json(lists, { status: 200 });
-    } catch (err: any) {
-        const status = Number(err?.status) || 500;
-        return NextResponse.json({ error: err?.message ?? "Server error" }, { status });
+    } catch (err: unknown) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        const status = (error as any).status ? Number((error as any).status) : 500;
+        return NextResponse.json({ error: error.message }, { status });
     }
 }
