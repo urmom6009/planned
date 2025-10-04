@@ -1,0 +1,53 @@
+// --------------
+// Prisma schema for DreamPlanner
+// --------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========== MODELS ==========
+
+// --- Tasks ---
+model Task {
+  id          String    @id @default(cuid())
+  listId      String?
+  title       String
+  description String?   // <- Added for your request
+  notes       String?
+  status      String?   @default("pending")
+  priority    String?   @default("medium")
+  progress    Float?    @default(0)
+  due         DateTime?
+  estimateMin Int?
+  tags        String[]  @default([])
+  milestone   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  milestoneRel Milestone? @relation(fields: [milestone], references: [id])
+
+  @@index([listId])
+  @@index([milestone])
+}
+
+// --- Milestones ---
+model Milestone {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  target      DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relation back to tasks
+  tasks Task[]
+
+  @@index([title])
+}

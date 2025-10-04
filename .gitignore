@@ -37,6 +37,10 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+.env.production
+.env.*.production
+.env.development
+.env.*.development
 
 # vercel
 .vercel
@@ -44,3 +48,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+/generated/prisma

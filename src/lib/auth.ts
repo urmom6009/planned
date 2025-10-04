@@ -1,7 +1,9 @@
 // src/lib/auth.ts
-export function getBearer(req: Request): string | null {
-    const h = req.headers.get("authorization") || "";
-    if (!h.startsWith("Bearer ")) return null;
-    const tok = h.slice(7).trim();
-    return tok.length ? tok : null;
+export function requireBearer(req: Request) {
+    const auth = req.headers.get('authorization') || '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    if (!token || token !== process.env.APP_TOKEN_DEV) { // replace with real verify
+        return { ok: false as const, status: 401, body: { error: 'Unauthorized' } };
+    }
+    return { ok: true as const };
 }
