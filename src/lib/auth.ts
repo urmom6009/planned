@@ -1,17 +1,20 @@
-// src/lib/auth.ts
-import type { NextRequest } from "next/server";
+import { NextRequest } from "next/server";
 
-export function getBearer(req: NextRequest): string | null {
-    const raw = req.headers.get("authorization") ?? "";
-    if (raw.toLowerCase().startsWith("bearer ")) return raw.slice(7).trim();
-    return null;
+export class HttpError extends Error {
+    status: number;
+    constructor(message: string, status = 400) {
+        super(message);
+        this.status = status;
+    }
 }
 
+/** Returns the bearer value, or throws 401. */
 export function requireBearer(req: NextRequest): string {
-    const token = getBearer(req) ?? process.env.CLICKUP_API_TOKEN ?? "";
-    if (!token) {
-        // Throwing is fine in route handlers; caller returns 401.
-        throw new Error("Unauthorized");
+    const h = req.headers.get("authorization") ?? "";
+    if (!h.toLowerCase().startsWith("bearer ")) {
+        throw new HttpError("Unauthorized", 401);
     }
+    const token = h.slice(7).trim();
+    if (!token) throw new HttpError("Unauthorized", 401);
     return token;
 }
